@@ -2,7 +2,7 @@ use crate::parse::{join_path, DeclarationArg, Property};
 use proc_macro2::TokenStream as TS;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
-use syn::Path;
+use syn::{Path, spanned::Spanned};
 
 pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
     let mut param_spec = ParamSpec::new(&property);
@@ -45,6 +45,7 @@ enum FlagSource {
 }
 
 struct ParamSpec {
+    name: String,
     builder: TS,
     builder_steps: Vec<TS>,
     flags: Vec<(FlagSource, Flag)>,
@@ -116,6 +117,7 @@ impl ParamSpec {
         }
 
         ParamSpec {
+            name,
             builder,
             builder_steps,
             flags,
@@ -125,6 +127,7 @@ impl ParamSpec {
 
     fn generate(self) -> TS {
         let ParamSpec {
+            name: _,
             builder,
             builder_steps,
             flags,
@@ -143,24 +146,37 @@ impl ParamSpec {
     }
 
     fn flag_read_only(&mut self) {
-        let conflict = self.flags.iter().find(|(_, flag)| {
+        self.check_flag_conflict("set", self.flags.iter().find(|(_, flag)| {
             match *flag {
                 Flag::Writable | Flag::Readwrite | Flag::Construct | Flag::ConstructOnly => true,
                 _ => false
             }
-        });
-        if let Some((FlagSource::Explicit(source), flag)) = conflict {
-            panic!("Property is implicitly read-only, but specifies conflicting flag {:?}", join_path(source));
-        }
+        }));
         self.flags.push((FlagSource::Implied, Flag::Readable));
     }
 
     fn flag_write_only(&mut self) {
+        self.check_flag_conflict("get", self.flags.iter().find(|(_, flag)| {
+            match *flag {
+                Flag::Readable | Flag::Readwrite => true,
+                _ => false
+            }
+        }));
         self.flags.push((FlagSource::Implied, Flag::Writable));
     }
 
     fn flag_read_write(&mut self) {
         self.flags.push((FlagSource::Implied, Flag::Readwrite));
+    }
+
+    fn check_flag_conflict(&self, block_name: &str, conflict: Option<&(FlagSource, Flag)>) {
+        if let Some((FlagSource::Explicit(source), _)) = conflict {
+            let flag_name = join_path(source);
+            source.span().unwrap()
+                .error(format!("Property {:?} is marked {}, but does not have a '{block_name}' block", self.name, flag_name))
+                .help(format!("Remove {:?} flag, or add a '{block_name}' block below", flag_name))
+                .emit();
+        }
     }
 }
 

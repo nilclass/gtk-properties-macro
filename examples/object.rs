@@ -36,10 +36,6 @@ mod imp {
                 get { self.ok_button.borrow().clone().to_value() }
                 set { self.ok_button.replace(value.get().expect("expected gtk::Button")); }
             }
-            #[string(readwrite)]
-            "name" => {
-                get { "foobar".to_value() }
-            }
         }
     }
 }
