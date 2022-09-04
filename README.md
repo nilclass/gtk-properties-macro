@@ -94,7 +94,6 @@ Implementing `properties`, `property` and `set_property` manually has some disad
 - adding a property involves modifying 3 different places (not counting adding any fields to the struct)
 - hard to verify if property flags are consistent with implementation (e.g. property is flagged readwrite, but only has a getter implemented)
 
-
 ## Details
 
 ### General structure
@@ -232,4 +231,26 @@ fn set_property(&self, object: &Self::Type, id: usize, value: Value, pspec: Para
       }
       ...
   }
+  ```
+- if many properties correspond to simple fields of the inner object struct, the get/set blocks could get repetitive.
+  Possible shorthand:
+  ```
+  struct MyObject {
+    x: Cell<i32>,
+    y: Cell<i32>,
+    z: Cell<i32>,
+  }
+
+  impl ObjectImpl for MyObject {
+      properties! {
+          #[int] "x" => cell(x),
+          #[int] "y" => cell(y),
+          #[int] "z" => cell(z),
+      }
+  }
+  ```
+  where `cell(x)` is eqivalent to
+  ```
+  get { self.x.get().to_value() }
+  set { self.x.replace(value.get().unwrap()) }
   ```
