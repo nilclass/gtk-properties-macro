@@ -2,7 +2,7 @@ use crate::parse::{join_path, DeclarationArg, Property};
 use proc_macro2::TokenStream as TS;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
-use syn::{Path, Ident, spanned::Spanned};
+use syn::{spanned::Spanned, Ident, Path};
 
 pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
     let mut param_spec = ParamSpec::new(&property);
@@ -15,7 +15,9 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
         match name.as_str() {
             "get" => {
                 if getter.is_some() {
-                    block.name.span()
+                    block
+                        .name
+                        .span()
                         .unwrap()
                         .error(format!("Duplicate 'get'"))
                         .span_note(getter.unwrap().0.span().unwrap(), "previous 'get' was here")
@@ -25,7 +27,9 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
             }
             "set" => {
                 if setter.is_some() {
-                    block.name.span()
+                    block
+                        .name
+                        .span()
                         .unwrap()
                         .error(format!("Duplicate 'set'"))
                         .span_note(setter.unwrap().0.span().unwrap(), "previous 'set' was here")
@@ -44,7 +48,11 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
         (false, false) => panic!("At least one block ('get' or 'set') is required"),
     }
 
-    (param_spec.generate(), getter.map(|(_, ts)| ts), setter.map(|(_, ts)| ts))
+    (
+        param_spec.generate(),
+        getter.map(|(_, ts)| ts),
+        setter.map(|(_, ts)| ts),
+    )
 }
 
 enum FlagSource {
@@ -154,22 +162,24 @@ impl ParamSpec {
     }
 
     fn flag_read_only(&mut self) {
-        self.check_flag_conflict("set", self.flags.iter().find(|(_, flag)| {
-            match *flag {
+        self.check_flag_conflict(
+            "set",
+            self.flags.iter().find(|(_, flag)| match *flag {
                 Flag::Writable | Flag::Readwrite | Flag::Construct | Flag::ConstructOnly => true,
-                _ => false
-            }
-        }));
+                _ => false,
+            }),
+        );
         self.flags.push((FlagSource::Implied, Flag::Readable));
     }
 
     fn flag_write_only(&mut self) {
-        self.check_flag_conflict("get", self.flags.iter().find(|(_, flag)| {
-            match *flag {
+        self.check_flag_conflict(
+            "get",
+            self.flags.iter().find(|(_, flag)| match *flag {
                 Flag::Readable | Flag::Readwrite => true,
-                _ => false
-            }
-        }));
+                _ => false,
+            }),
+        );
         self.flags.push((FlagSource::Implied, Flag::Writable));
     }
 
@@ -180,9 +190,17 @@ impl ParamSpec {
     fn check_flag_conflict(&self, block_name: &str, conflict: Option<&(FlagSource, Flag)>) {
         if let Some((FlagSource::Explicit(source), _)) = conflict {
             let flag_name = join_path(source);
-            source.span().unwrap()
-                .error(format!("Property {:?} is marked {}, but does not have a '{block_name}' block", self.name, flag_name))
-                .help(format!("Remove {:?} flag, or add a '{block_name}' block below", flag_name))
+            source
+                .span()
+                .unwrap()
+                .error(format!(
+                    "Property {:?} is marked {}, but does not have a '{block_name}' block",
+                    self.name, flag_name
+                ))
+                .help(format!(
+                    "Remove {:?} flag, or add a '{block_name}' block below",
+                    flag_name
+                ))
                 .emit();
         }
     }

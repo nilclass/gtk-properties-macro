@@ -1,6 +1,12 @@
 [package]
 name = "gtk-properties-macro"
 version = "0.1.0"
+description = "Experimental property declaration macro for gtk-rs"
+authors = ["Niklas Cathor <niklas.cathor@gmx.de>"]
+repository = "https://github.com/nilclass/gtk-properties-macro"
+keywords = ["gtk", "gtk-rs", "macro"]
+license = "MIT"
+readme = "README.md"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
