@@ -1,8 +1,8 @@
-use std::collections::HashSet;
-use quote::quote;
+use crate::parse::{join_path, DeclarationArg, Property};
 use proc_macro2::TokenStream as TS;
-use syn::Ident;
-use crate::parse::{Property, DeclarationArg};
+use quote::{format_ident, quote};
+use std::collections::HashSet;
+use syn::Path;
 
 pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
     let mut param_spec = ParamSpec::new(&property);
@@ -25,7 +25,7 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
                 }
                 setter = Some(quote! { #id => #impl_block });
             }
-            _ => panic!("Unsupported block: {name}")
+            _ => panic!("Unsupported block: {name}"),
         }
     }
 
@@ -40,7 +40,7 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
 }
 
 enum FlagSource {
-    Explicit(Ident),
+    Explicit(Path),
     Implied,
 }
 
@@ -55,34 +55,81 @@ impl ParamSpec {
     fn new(property: &Property) -> Self {
         let mut flags: Vec<(FlagSource, Flag)> = vec![];
         let mut builder_steps: Vec<TS> = vec![];
-        let doc_strings = property.head.doc.iter().map(|doc| doc.value()).collect::<Vec<String>>();
-        let docs = if doc_strings.is_empty() { None } else { Some(doc_strings.join("::").trim_start().to_string()) };
+        let doc_strings = property
+            .head
+            .doc
+            .iter()
+            .map(|doc| doc.value())
+            .collect::<Vec<String>>();
+        let docs = if doc_strings.is_empty() {
+            None
+        } else {
+            Some(doc_strings.join("\n").trim_start().to_string())
+        };
         let name = property.name.value();
 
-        if let Some(args) = &property.head.declaration.args {
-            for arg in &args.args {
-                match arg {
-                    DeclarationArg::Tag(tag) => {
-                        flags.push((FlagSource::Explicit(tag.clone()), Flag::from_ident(&tag)));
-                    },
-                    DeclarationArg::KeyVal(key, _, value) => {
-                        builder_steps.push(quote! { .#key(#value) });
-                    },
+        let mut args: Vec<DeclarationArg> = property
+            .head
+            .declaration
+            .args
+            .as_ref()
+            .map(|args| args.args.iter().cloned().collect())
+            .unwrap_or_default();
+
+        let builder = {
+            let type_tag = property.head.declaration.tag.as_str();
+            match type_tag {
+                "boolean" | "char" | "double" | "float" | "int" | "int64" | "long" | "string" => {
+                    let type_name = format_ident!(
+                        "ParamSpec{}{}",
+                        &type_tag[0..1].to_uppercase(),
+                        &type_tag[1..]
+                    );
+                    quote! { #type_name::builder(#name) }
+                }
+                "object" => {
+                    if args.len() == 0 {
+                        panic!(
+                            "property of type 'object' requires an object type as first argument"
+                        );
+                    }
+                    let object_type = if let DeclarationArg::Tag(tag) = args.remove(0) {
+                        tag
+                    } else {
+                        panic!("Expected object type, not key/val")
+                    };
+                    quote! { ParamSpecObject::builder(#name, #object_type::static_type()) }
+                }
+                _ => unimplemented!("not yet implemented: {}", type_tag),
+            }
+        };
+
+        for arg in &args {
+            match arg {
+                DeclarationArg::Tag(tag) => {
+                    flags.push((FlagSource::Explicit(tag.clone()), Flag::from_path(&tag)));
+                }
+                DeclarationArg::KeyVal(key, _, value) => {
+                    builder_steps.push(quote! { .#key(#value) });
                 }
             }
         }
-        
 
-        let builder = match property.head.declaration.tag.as_str() {
-            "string" => quote! { ParamSpecString::builder(#name) },
-            _ => unimplemented!()
-        };
-
-        ParamSpec { builder, builder_steps, flags, docs }
+        ParamSpec {
+            builder,
+            builder_steps,
+            flags,
+            docs,
+        }
     }
 
     fn generate(self) -> TS {
-        let ParamSpec { builder, builder_steps, flags, docs } = self;
+        let ParamSpec {
+            builder,
+            builder_steps,
+            flags,
+            docs,
+        } = self;
         let mut aspects = vec![];
         if flags.len() > 0 {
             aspects.push(generate_flags(flags));
@@ -95,8 +142,16 @@ impl ParamSpec {
         }
     }
 
-
     fn flag_read_only(&mut self) {
+        let conflict = self.flags.iter().find(|(_, flag)| {
+            match *flag {
+                Flag::Writable | Flag::Readwrite | Flag::Construct | Flag::ConstructOnly => true,
+                _ => false
+            }
+        });
+        if let Some((FlagSource::Explicit(source), flag)) = conflict {
+            panic!("Property is implicitly read-only, but specifies conflicting flag {:?}", join_path(source));
+        }
         self.flags.push((FlagSource::Implied, Flag::Readable));
     }
 
@@ -111,7 +166,8 @@ impl ParamSpec {
 
 fn generate_flags(flags: Vec<(FlagSource, Flag)>) -> TS {
     let mut seen_flags = HashSet::new();
-    let flags: Vec<TS> = flags.into_iter()
+    let flags: Vec<TS> = flags
+        .into_iter()
         .filter(|(_, flag)| {
             if seen_flags.contains(flag) {
                 false
@@ -124,7 +180,6 @@ fn generate_flags(flags: Vec<(FlagSource, Flag)>) -> TS {
         .collect();
     quote! { .flags(#(#flags)|*) }
 }
-
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy)]
 enum Flag {
@@ -160,8 +215,8 @@ impl Flag {
         }
     }
 
-    fn from_ident(ident: &Ident) -> Self {
-        let s = ident.to_string();
+    fn from_path(path: &Path) -> Self {
+        let s = join_path(path);
         match s.as_str() {
             "readable" => Flag::Readable,
             "writable" => Flag::Writable,
@@ -175,7 +230,7 @@ impl Flag {
             "static_blurb" => Flag::StaticBlurb,
             "explicit_notify" => Flag::ExplicitNotify,
             "deprecated" => Flag::Deprecated,
-            _ => todo!()
+            _ => unimplemented!("Unsupported flag: {}", s),
         }
     }
 }

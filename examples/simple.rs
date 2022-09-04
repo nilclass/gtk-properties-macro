@@ -30,7 +30,6 @@ mod imp {
     }
 
     impl ObjectImpl for MyClass {
-
         // `properties!` must be called within a `impl ObjectImpl` block.
         //
         // It implements the three functions necessary for properties to work:
@@ -81,7 +80,13 @@ mod imp {
 
 fn main() {
     let my_object = MyClass::new();
-    println!("Object name before set: {:?}", my_object.property::<String>("name"));
+    println!(
+        "Object name before set: {:?}",
+        my_object.property::<String>("name")
+    );
     my_object.set_property("name", "New Name".to_string().to_value());
-    println!("Object name after set: {:?}", my_object.property::<String>("name"));
+    println!(
+        "Object name after set: {:?}",
+        my_object.property::<String>("name")
+    );
 }

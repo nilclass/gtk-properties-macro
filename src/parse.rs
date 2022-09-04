@@ -2,23 +2,14 @@ use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    token, Attribute, Ident, Lit, LitStr, Result, Token,
+    token, Attribute, Ident, Lit, LitStr, Path, Result, Token,
 };
 
-pub struct Properties(LooselySeparated<Property>);
+pub struct Properties(pub LooselySeparated<Property>);
 
 impl Parse for Properties {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Properties(input.parse()?))
-    }
-}
-
-impl IntoIterator for Properties {
-    type Item = Property;
-    type IntoIter = std::vec::IntoIter<Property>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0 .0.into_iter()
     }
 }
 
@@ -101,7 +92,7 @@ impl Parse for Head {
     }
 }
 
-fn join_path(path: &syn::Path) -> String {
+pub fn join_path(path: &Path) -> String {
     path.segments
         .iter()
         .map(|segment| segment.ident.to_string())
@@ -129,14 +120,17 @@ impl Parse for DeclarationArgs {
     }
 }
 
+#[derive(Clone)]
 pub enum DeclarationArg {
-    Tag(Ident),
-    KeyVal(Ident, Token![=], Lit),
+    // either a flag (readable, construct, ...), or a type name (for properties with ParamSpecObject)
+    Tag(Path),
+    // key = value flags which compile to `.#key(#value)` calls on the builder
+    KeyVal(Path, Token![=], Lit),
 }
 
 impl Parse for DeclarationArg {
     fn parse(input: ParseStream) -> Result<Self> {
-        let key: Ident = input.parse()?;
+        let key: Path = input.parse()?;
         if input.peek(Token![=]) {
             let eq: Token![=] = input.parse()?;
             let value: Lit = input.parse()?;

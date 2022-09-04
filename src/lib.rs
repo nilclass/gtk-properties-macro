@@ -13,7 +13,7 @@ pub fn properties(tokens: TokenStream) -> TokenStream {
     let mut getters: Vec<proc_macro2::TokenStream> = vec![];
     let mut setters: Vec<proc_macro2::TokenStream> = vec![];
 
-    for (index, property) in properties.into_iter().enumerate() {
+    for (index, property) in properties.0 .0.into_iter().enumerate() {
         let id = index + 1;
         let (param_spec, getter, setter) = generate::property(id, property);
         param_specs.push(param_spec);
