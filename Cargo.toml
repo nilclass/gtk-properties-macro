@@ -1,0 +1,19 @@
+[package]
+name = "gtk_properties_macro"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dev-dependencies]
+macrotest = "1.0"
+cargo-expand = "1.0"
+gtk = { version = "0.4.8", package = "gtk4" }
