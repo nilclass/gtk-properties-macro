@@ -1,5 +1,5 @@
 [package]
-name = "gtk_properties_macro"
+name = "gtk-properties-macro"
 version = "0.1.0"
 edition = "2021"
 

@@ -2,12 +2,12 @@ use crate::parse::{join_path, DeclarationArg, Property};
 use proc_macro2::TokenStream as TS;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
-use syn::{Path, spanned::Spanned};
+use syn::{Path, Ident, spanned::Spanned};
 
 pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
     let mut param_spec = ParamSpec::new(&property);
-    let mut getter: Option<TS> = None;
-    let mut setter: Option<TS> = None;
+    let mut getter: Option<(Ident, TS)> = None;
+    let mut setter: Option<(Ident, TS)> = None;
 
     for block in property.blocks.0 {
         let name = block.name.to_string();
@@ -15,15 +15,23 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
         match name.as_str() {
             "get" => {
                 if getter.is_some() {
-                    panic!("duplicate get");
+                    block.name.span()
+                        .unwrap()
+                        .error(format!("Duplicate 'get'"))
+                        .span_note(getter.unwrap().0.span().unwrap(), "previous 'get' was here")
+                        .emit();
                 }
-                getter = Some(quote! { #id => #impl_block });
+                getter = Some((block.name, quote! { #id => #impl_block }));
             }
             "set" => {
                 if setter.is_some() {
-                    panic!("duplicate set");
+                    block.name.span()
+                        .unwrap()
+                        .error(format!("Duplicate 'set'"))
+                        .span_note(setter.unwrap().0.span().unwrap(), "previous 'set' was here")
+                        .emit();
                 }
-                setter = Some(quote! { #id => #impl_block });
+                setter = Some((block.name, quote! { #id => #impl_block }));
             }
             _ => panic!("Unsupported block: {name}"),
         }
@@ -36,7 +44,7 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
         (false, false) => panic!("At least one block ('get' or 'set') is required"),
     }
 
-    (param_spec.generate(), getter, setter)
+    (param_spec.generate(), getter.map(|(_, ts)| ts), setter.map(|(_, ts)| ts))
 }
 
 enum FlagSource {
