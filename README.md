@@ -225,6 +225,7 @@ fn set_property(&self, object: &Self::Type, id: usize, value: Value, pspec: Para
   ```
   properties! {
       ...
+      // sth like ParamSpecValueArray::builder("my-string-array", ParamSpecString::builder("my-string").build()).flags(...).build()
       #[array(string(name = "my-string"), explicit_notify)]
       "my-string-array" => {
           ...
