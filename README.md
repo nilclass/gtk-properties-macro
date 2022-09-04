@@ -6,6 +6,8 @@ This package contains a macro that makes it easier to declare object properties 
 
 For a general introduction to GTK properties in Rust, please refer to the ["Properties" chapter of the gtk-rs book](https://gtk-rs.org/gtk4-rs/stable/latest/book/g_object_properties.html#properties).
 
+This macro provides a shorter way to write properties.
+
 ## Usage
 
 Add this to your `Cargo.toml`:
