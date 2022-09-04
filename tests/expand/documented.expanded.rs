@@ -13,6 +13,7 @@ impl ObjectImpl for MyObject {
                     ParamSpecString::builder("name")
                         .flags(glib::ParamFlags::READABLE)
                         .blurb("contains the name of this object")
+                        .nick("Object Name")
                         .build(),
                 ]),
             )

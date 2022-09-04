@@ -39,6 +39,93 @@ pub fn property(id: usize, property: Property) -> (TS, Option<TS>, Option<TS>) {
     (param_spec.generate(), getter, setter)
 }
 
+enum FlagSource {
+    Explicit(Ident),
+    Implied,
+}
+
+struct ParamSpec {
+    builder: TS,
+    builder_steps: Vec<TS>,
+    flags: Vec<(FlagSource, Flag)>,
+    docs: Option<String>,
+}
+
+impl ParamSpec {
+    fn new(property: &Property) -> Self {
+        let mut flags: Vec<(FlagSource, Flag)> = vec![];
+        let mut builder_steps: Vec<TS> = vec![];
+        let doc_strings = property.head.doc.iter().map(|doc| doc.value()).collect::<Vec<String>>();
+        let docs = if doc_strings.is_empty() { None } else { Some(doc_strings.join("::").trim_start().to_string()) };
+        let name = property.name.value();
+
+        if let Some(args) = &property.head.declaration.args {
+            for arg in &args.args {
+                match arg {
+                    DeclarationArg::Tag(tag) => {
+                        flags.push((FlagSource::Explicit(tag.clone()), Flag::from_ident(&tag)));
+                    },
+                    DeclarationArg::KeyVal(key, _, value) => {
+                        builder_steps.push(quote! { .#key(#value) });
+                    },
+                }
+            }
+        }
+        
+
+        let builder = match property.head.declaration.tag.as_str() {
+            "string" => quote! { ParamSpecString::builder(#name) },
+            _ => unimplemented!()
+        };
+
+        ParamSpec { builder, builder_steps, flags, docs }
+    }
+
+    fn generate(self) -> TS {
+        let ParamSpec { builder, builder_steps, flags, docs } = self;
+        let mut aspects = vec![];
+        if flags.len() > 0 {
+            aspects.push(generate_flags(flags));
+        }
+        if let Some(blurb) = docs {
+            aspects.push(quote! { .blurb(#blurb) });
+        }
+        quote! {
+            #builder #(#aspects)* #(#builder_steps)* .build()
+        }
+    }
+
+
+    fn flag_read_only(&mut self) {
+        self.flags.push((FlagSource::Implied, Flag::Readable));
+    }
+
+    fn flag_write_only(&mut self) {
+        self.flags.push((FlagSource::Implied, Flag::Writable));
+    }
+
+    fn flag_read_write(&mut self) {
+        self.flags.push((FlagSource::Implied, Flag::Readwrite));
+    }
+}
+
+fn generate_flags(flags: Vec<(FlagSource, Flag)>) -> TS {
+    let mut seen_flags = HashSet::new();
+    let flags: Vec<TS> = flags.into_iter()
+        .filter(|(_, flag)| {
+            if seen_flags.contains(flag) {
+                false
+            } else {
+                seen_flags.insert(*flag);
+                true
+            }
+        })
+        .map(|(_, flag)| flag.to_token_stream())
+        .collect();
+    quote! { .flags(#(#flags)|*) }
+}
+
+
 #[derive(Hash, Eq, PartialEq, Clone, Copy)]
 enum Flag {
     Readable,
@@ -56,7 +143,7 @@ enum Flag {
 }
 
 impl Flag {
-    fn generate(&self) -> TS {
+    fn to_token_stream(&self) -> TS {
         match self {
             Flag::Readable => quote! { glib::ParamFlags::READABLE },
             Flag::Writable => quote! { glib::ParamFlags::WRITABLE },
@@ -91,88 +178,4 @@ impl Flag {
             _ => todo!()
         }
     }
-}
-
-enum FlagSource {
-    Explicit(Ident),
-    Implied,
-}
-
-struct ParamSpec {
-    builder: TS,
-    flags: Vec<(FlagSource, Flag)>,
-    docs: Option<String>,
-}
-
-impl ParamSpec {
-    fn new(property: &Property) -> Self {
-        let mut flags = vec![];
-        let doc_strings = property.head.doc.iter().map(|doc| doc.value()).collect::<Vec<String>>();
-        let docs = if doc_strings.is_empty() { None } else { Some(doc_strings.join("::").trim_start().to_string()) };
-        let name = property.name.value();
-
-        if let Some(args) = &property.head.declaration.args {
-            for arg in &args.args {
-                match arg {
-                    DeclarationArg::Tag(tag) => {
-                        flags.push((FlagSource::Explicit(tag.clone()), Flag::from_ident(&tag)));
-                    },
-                    DeclarationArg::KeyVal(key, _, value) => {
-                        println!("KEYVAL: {} => ???", key.to_string());
-                    },
-                }
-            }
-        }
-        
-
-        let builder = match property.head.declaration.tag.as_str() {
-            "string" => quote! { ParamSpecString::builder(#name) },
-            _ => unimplemented!()
-        };
-
-        ParamSpec { builder, flags, docs }
-    }
-
-    fn generate(self) -> TS {
-        let ParamSpec { builder, flags, docs } = self;
-        let mut aspects = vec![];
-        if flags.len() > 0 {
-            aspects.push(generate_flags(flags));
-        }
-        if let Some(blurb) = docs {
-            aspects.push(quote! { .blurb(#blurb) });
-        }
-        quote! {
-            #builder #(#aspects)*.build()
-        }
-    }
-
-
-    fn flag_read_only(&mut self) {
-        self.flags.push((FlagSource::Implied, Flag::Readable));
-    }
-
-    fn flag_write_only(&mut self) {
-        self.flags.push((FlagSource::Implied, Flag::Writable));
-    }
-
-    fn flag_read_write(&mut self) {
-        self.flags.push((FlagSource::Implied, Flag::Readwrite));
-    }
-}
-
-fn generate_flags(flags: Vec<(FlagSource, Flag)>) -> TS {
-    let mut seen_flags = HashSet::new();
-    let flags: Vec<TS> = flags.into_iter()
-        .filter(|(_, flag)| {
-            if seen_flags.contains(flag) {
-                false
-            } else {
-                seen_flags.insert(*flag);
-                true
-            }
-        })
-        .map(|(_, flag)| flag.generate())
-        .collect();
-    quote! { .flags(#(#flags)|*) }
 }

@@ -7,7 +7,7 @@ struct MyObject {
 impl ObjectImpl for MyObject {
     properties! {
         /// contains the name of this object
-        #[string]
+        #[string(nick="Object Name")]
         "name" => {
             get { self.name.borrow().clone().to_value() }
         }
